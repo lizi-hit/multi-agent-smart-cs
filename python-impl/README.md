@@ -1,117 +1,160 @@
-# Python 实现 — LangGraph + FastAPI
+# 多 Agent 电商客服系统（Python）
 
-基于 LangGraph StateGraph 的多Agent智能客服系统，Python原生实现。
+一个基于 **LangGraph + FastAPI** 的多 Agent 电商客服项目，支持电商场景中的：
+- 商品/政策问答（RAG）
+- 订单与售后工具调用（MCP）
+- 工单流转
+- 合规与内容安全审查
+- 流式响应与人工复核（HITL）
 
-## 技术栈
+> 本目录是仓库的 Python 主实现。
 
-| 组件 | 技术 |
+---
+
+## 1. 系统架构
+
+请求主链路：
+
+`用户消息 -> intent_router -> supervisor_route -> 业务Agent -> compliance_check -> synthesize -> 回复`
+
+核心 Agent：
+
+| Agent | 职责 |
 |------|------|
-| Agent编排 | LangGraph StateGraph + MemorySaver |
-| HTTP框架 | FastAPI + Uvicorn |
-| LLM调用 | LangChain ChatOpenAI |
-| 向量检索 | FAISS |
-| 短期记忆 | Redis (aioredis) |
-| 追踪 | OpenTelemetry + Jaeger |
-| 协议 | MCP (JSON-RPC 2.0) |
+| `Supervisor` | 中央编排、路由汇总、降级兜底 |
+| `Intent Router` | 意图识别（知识问答 / 工单处理 / 合规检查） |
+| `Knowledge RAG` | 查询改写、混合检索、融合重排、答案生成 |
+| `Ticket Handler` | 售后/工单创建与查询 |
+| `Compliance Checker` | 规则 + LLM 双阶段审查、PII 脱敏 |
 
-## 快速开始
+---
+
+## 2. 已实现能力（贴近当前代码）
+
+- **SSE 流式聊天**：`POST /api/chat/stream`
+- **统一超时 + 重试 + 降级**：图执行与节点执行双层保护
+- **三层记忆**：工作记忆 / 短期记忆（Redis）/ 长期记忆（向量）
+- **RAG 完整链路（电商）**：
+  - Query 改写（失败降级）
+  - 相似度检索 + 关键词检索（BM25-like）
+  - 加权融合 + RRF 融合
+  - LLM 重排序
+  - 上下文预算控制与低置信度门控
+- **MCP 能力**：
+  - `tools/*`, `resources/*`, `prompts/*`
+  - 角色权限控制与审计日志
+- **HITL 人工复核**：
+  - 待审队列查询
+  - 人工 approve/reject
+- **Harness 最小评测工程**：
+  - 路由准确率
+  - RAG 关键词命中
+  - 阈值门禁 + 报告产物 + CI
+- **内置 Web 控制台**（无 Node 构建）：
+  - 页面路径：`/`
+
+---
+
+## 3. 快速启动
+
+### 3.1 手动启动（推荐先跑通）
 
 ```bash
-# 安装依赖
 pip install -r requirements.txt
-
-# 配置环境变量
 cp .env.example .env
-# 编辑 .env 填入 OPENAI_API_KEY
-
-# 启动服务
 python -m api.main
 ```
 
-服务启动后访问 http://localhost:8000/docs 查看 Swagger UI。
+访问：
+- Web UI: `http://127.0.0.1:8000/`
+- Swagger: `http://127.0.0.1:8000/docs`
+- Health: `http://127.0.0.1:8000/health`
 
-## 项目结构
+### 3.2 Windows 一键启动（仓库根目录）
 
-```
-python-impl/
-├── agents/                     # Agent实现
-│   ├── supervisor.py           # Supervisor编排Agent（StateGraph核心）
-│   ├── intent_router.py        # 意图路由Agent
-│   ├── knowledge_rag.py        # RAG知识检索Agent
-│   ├── ticket_handler.py       # 工单处理Agent
-│   └── compliance_checker.py   # 合规审查Agent
-├── memory/                     # 三层记忆系统
-│   ├── working_memory.py       # 工作记忆（进程内存）
-│   ├── short_term.py           # 短期记忆（Redis，30min TTL）
-│   └── long_term.py            # 长期记忆（FAISS向量库）
-├── mcp/                        # MCP工具协议
-│   ├── mcp_server.py           # JSON-RPC 2.0服务端
-│   └── tools/                  # 工具定义
-├── tracing/                    # OpenTelemetry追踪
-│   └── otel_config.py          # 追踪配置 + Agent装饰器
-├── api/                        # FastAPI接口层
-│   └── main.py                 # REST API入口
-├── requirements.txt
-├── Dockerfile
-└── .env.example
+```powershell
+powershell -ExecutionPolicy Bypass -File ..\scripts\start-all.ps1
 ```
 
-## 核心特性
+---
 
-### Supervisor编排
-
-LangGraph StateGraph构建有向图，条件路由根据意图分发到不同Agent：
-
-```python
-graph.add_conditional_edges(
-    "supervisor_route",
-    route_to_agent,
-    {"knowledge_rag": "knowledge_rag", "ticket_handler": "ticket_handler"},
-)
-graph.add_edge("knowledge_rag", "compliance_check")
-graph.add_edge("compliance_check", "synthesize")
-```
-
-### RAG管线
-
-完整5步RAG流程：Query改写 → 向量检索(Top-5) → LLM重排序(Top-3) → 上下文注入 → 生成回答。
-
-### 两阶段合规审查
-
-1. **规则引擎**（<2ms）：敏感词匹配 + PII检测
-2. **LLM深度审查**（~600ms）：处理越权承诺、隐晦违规等规则无法覆盖的场景
-3. 高风险直接拦截不走LLM，LLM失败安全降级为通过
-
-### MCP工具
-
-4个已注册工具：
-- `order_query` — 订单查询
-- `knowledge_search` — 知识库搜索
-- `ticket_create` — 工单创建
-- `risk_check` — 风控检查
-
-## API接口
+## 4. API 总览
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/api/chat` | POST | 聊天 |
-| `/api/history/{session_id}` | GET | 对话历史 |
-| `/api/tools` | GET | MCP工具列表 |
-| `/api/tools/call` | POST | MCP工具调用 |
-| `/api/metrics` | GET | 系统指标 |
+| `/` | GET | 内置 Web 控制台 |
+| `/api/chat` | POST | 普通聊天 |
+| `/api/chat/stream` | POST | SSE 流式聊天 |
+| `/api/history/{session_id}` | GET | 会话历史 |
+| `/api/tools` | GET | MCP 工具列表 |
+| `/api/tools/call` | POST | MCP 工具调用 |
+| `/api/mcp/jsonrpc` | POST | MCP JSON-RPC 统一入口 |
+| `/api/resources` | GET | MCP 资源列表 |
+| `/api/resources/read` | GET | MCP 资源读取 |
+| `/api/prompts` | GET | MCP Prompt 列表 |
+| `/api/prompts/get` | POST | MCP Prompt 渲染 |
+| `/api/hitl/pending` | GET | 待人工审核会话 |
+| `/api/hitl/review/{session_id}` | POST | 人工审核通过/驳回 |
+| `/api/eval/routing` | POST | 路由准确率评测 |
+| `/api/metrics` | GET | 系统指标 + 工具审计日志 |
 | `/health` | GET | 健康检查 |
 
-### 测试
+---
+
+## 5. Harness 使用
+
+在仓库根目录运行：
 
 ```bash
-curl -X POST http://localhost:8000/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{"user_id": "user_001", "message": "理财产品A的收益率是多少？"}'
+python harness/run_harness.py --base-url http://127.0.0.1:8000 --config harness/config.yaml
 ```
 
-## Docker
+结果文件：
+- `harness/results/latest.json`
+- `harness/results/latest.md`
 
-```bash
-docker build -t smart-cs-python .
-docker run -p 8000:8000 --env-file .env smart-cs-python
+---
+
+## 6. 环境变量
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `OPENAI_API_KEY` | LLM API Key | 无 |
+| `OPENAI_BASE_URL` | OpenAI 兼容端点 | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+| `MODEL_NAME` | 对话模型 | `qwen-plus` |
+| `EMBEDDING_PROVIDER` | 向量提供方 | `openai` |
+| `EMBEDDING_MODEL` | 向量模型 | `text-embedding-v3` |
+| `REDIS_URL` | 短期记忆 Redis 地址 | `redis://localhost:6379/0` |
+| `VECTOR_STORE_TYPE` | 向量存储类型 | `faiss` |
+| `FAISS_INDEX_PATH` | FAISS 索引路径 | `./vector_store/faiss_index` |
+| `GRAPH_TIMEOUT_SECONDS` | 图执行超时 | `20` |
+| `GRAPH_MAX_RETRIES` | 图执行重试次数 | `1` |
+| `ORDER_SERVICE_URL` | 外部订单服务（可选） | 空（回退 mock） |
+| `TICKET_SERVICE_URL` | 外部工单服务（可选） | 空（回退 mock） |
+| `RISK_SERVICE_URL` | 外部风险服务（可选） | 空（回退 mock） |
+
+---
+
+## 7. 项目结构
+
+```text
+python-impl/
+├── agents/
+├── api/
+│   └── main.py
+├── mcp/
+├── memory/
+├── tracing/
+├── web/
+│   └── index.html
+├── .env.example
+├── Dockerfile
+└── requirements.txt
 ```
+
+---
+
+## 8. 说明
+
+- 本目录为求职/学习导向的可运行工程，重点在多 Agent 编排与电商客服落地能力。
+- 如需生产部署，建议补充：鉴权、幂等、熔断、评测集扩展、成本监控和持久化 HITL 队列。
