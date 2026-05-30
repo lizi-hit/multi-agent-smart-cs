@@ -1,0 +1,77 @@
+name: Harness Eval
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  harness:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r python-impl/requirements.txt
+
+      - name: Skip if API key missing
+        id: keycheck
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "OPENAI_API_KEY not set, skip harness run."
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Start service
+        if: steps.keycheck.outputs.skip == 'false'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1' }}
+          MODEL_NAME: ${{ vars.MODEL_NAME || 'qwen-plus' }}
+          EMBEDDING_MODEL: ${{ vars.EMBEDDING_MODEL || 'text-embedding-v3' }}
+          REDIS_URL: redis://localhost:6379/0
+          GRAPH_TIMEOUT_SECONDS: "20"
+          GRAPH_MAX_RETRIES: "1"
+        run: |
+          docker run -d --name redis -p 6379:6379 redis:7-alpine
+          cd python-impl
+          nohup python -m api.main > ../harness_service.log 2>&1 &
+          cd ..
+          for i in {1..60}; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/health || true)
+            if [ "$code" = "200" ]; then
+              echo "service ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "service not ready"
+          exit 1
+
+      - name: Run harness
+        if: steps.keycheck.outputs.skip == 'false'
+        run: |
+          python harness/run_harness.py --base-url http://127.0.0.1:8000 --config harness/config.yaml
+
+      - name: Upload harness artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-results
+          path: |
+            harness/results/latest.json
+            harness/results/latest.md
+            harness_service.log

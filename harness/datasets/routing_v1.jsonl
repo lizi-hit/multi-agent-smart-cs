@@ -1,0 +1,5 @@
+{"message":"我想了解理财产品A的收益率", "expected_intent":"knowledge_rag"}
+{"message":"帮我申请退款", "expected_intent":"ticket_handler"}
+{"message":"我的银行卡可能被盗刷了怎么办", "expected_intent":"compliance_checker"}
+{"message":"开户流程是什么", "expected_intent":"ticket_handler"}
+{"message":"退款多久到账", "expected_intent":"ticket_handler"}

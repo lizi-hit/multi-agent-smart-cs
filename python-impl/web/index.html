@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>智能客服多Agent系统</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --panel: #121a2f;
+        --panel-2: #17213b;
+        --text: #e8ecf8;
+        --sub: #9aa7c7;
+        --primary: #5b8cff;
+        --ok: #16a34a;
+        --warn: #f59e0b;
+        --bad: #ef4444;
+        --border: #273352;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        background: linear-gradient(160deg, #0b1020, #0f1630 40%, #0f1a36);
+        color: var(--text);
+      }
+      .container {
+        max-width: 1100px;
+        margin: 28px auto;
+        padding: 0 16px 28px;
+      }
+      .title {
+        font-size: 26px;
+        margin: 0 0 6px;
+      }
+      .sub {
+        margin: 0 0 18px;
+        color: var(--sub);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1.35fr 1fr;
+        gap: 14px;
+      }
+      .card {
+        background: rgba(18, 26, 47, 0.9);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px;
+      }
+      .row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        flex: 1;
+        min-width: 180px;
+      }
+      label { color: var(--sub); font-size: 13px; }
+      input, textarea, select {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--panel-2);
+        color: var(--text);
+        padding: 10px 12px;
+        outline: none;
+      }
+      textarea { min-height: 100px; resize: vertical; }
+      .btns { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+      button {
+        border: none;
+        background: var(--primary);
+        color: white;
+        border-radius: 10px;
+        padding: 10px 14px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      button.secondary { background: #334155; }
+      button.warn { background: #b45309; }
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        background: #1e293b;
+      }
+      .status.ok { color: #86efac; border: 1px solid #14532d; }
+      .status.bad { color: #fecaca; border: 1px solid #7f1d1d; }
+      .panel-title {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      .chat-box {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px;
+        min-height: 320px;
+        max-height: 520px;
+        overflow: auto;
+        background: #0f172a;
+      }
+      .msg {
+        margin-bottom: 10px;
+        padding: 9px 10px;
+        border-radius: 10px;
+        white-space: pre-wrap;
+      }
+      .msg.user { background: #1d4ed8; }
+      .msg.assistant { background: #1e293b; }
+      .msg.meta {
+        background: #111827;
+        border: 1px dashed #374151;
+        color: #cbd5e1;
+        font-size: 12px;
+      }
+      .kv {
+        font-size: 12px;
+        color: var(--sub);
+        margin-top: 8px;
+      }
+      pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      @media (max-width: 920px) {
+        .grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1 class="title">智能客服多Agent系统</h1>
+      <p class="sub">Web 控制台（聊天 / 流式回复 / 会话历史 / MCP 工具调用）</p>
+
+      <div class="grid">
+        <div class="card">
+          <div class="panel-title">
+            <strong>聊天测试</strong>
+            <span id="healthBadge" class="status">Health checking...</span>
+          </div>
+
+          <div class="row">
+            <div class="field">
+              <label>user_id</label>
+              <input id="userId" value="student_user_001" />
+            </div>
+            <div class="field">
+              <label>session_id（留空自动生成）</label>
+              <input id="sessionId" placeholder="例如：demo-session-001" />
+            </div>
+            <div class="field">
+              <label>模式</label>
+              <select id="chatMode">
+                <option value="normal">普通聊天 /api/chat</option>
+                <option value="stream">流式聊天 /api/chat/stream</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field" style="margin-top:10px;">
+            <label>message</label>
+            <textarea id="messageInput">我想了解退款政策</textarea>
+          </div>
+          <div class="btns">
+            <button id="sendBtn">发送</button>
+            <button id="historyBtn" class="secondary">查询会话历史</button>
+            <button id="clearBtn" class="secondary">清空窗口</button>
+          </div>
+
+          <div id="chatBox" class="chat-box" style="margin-top:10px;"></div>
+          <div id="chatMeta" class="kv"></div>
+        </div>
+
+        <div class="card">
+          <div class="panel-title">
+            <strong>MCP 工具测试</strong>
+          </div>
+
+          <div class="field">
+            <label>工具名</label>
+            <select id="toolName">
+              <option value="order_query">order_query</option>
+              <option value="knowledge_search">knowledge_search</option>
+              <option value="ticket_create">ticket_create</option>
+              <option value="risk_check">risk_check</option>
+            </select>
+          </div>
+          <div class="field" style="margin-top:10px;">
+            <label>arguments（JSON）</label>
+            <textarea id="toolArgs">{"order_id":"ORD-20260401-001"}</textarea>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label>x-user-id</label>
+              <input id="toolUserId" value="api-user" />
+            </div>
+            <div class="field">
+              <label>x-user-role</label>
+              <select id="toolRole">
+                <option>agent</option>
+                <option>admin</option>
+                <option>auditor</option>
+                <option>viewer</option>
+              </select>
+            </div>
+          </div>
+          <div class="btns">
+            <button id="toolCallBtn">调用工具</button>
+            <button id="toolListBtn" class="secondary">获取工具列表</button>
+            <button id="metricsBtn" class="warn">查看系统指标</button>
+          </div>
+          <div class="chat-box" style="margin-top:10px; min-height:220px; max-height:420px;">
+            <pre id="toolOutput"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const healthBadge = document.getElementById("healthBadge");
+      const chatBox = document.getElementById("chatBox");
+      const chatMeta = document.getElementById("chatMeta");
+      const toolOutput = document.getElementById("toolOutput");
+
+      function addMsg(role, text) {
+        const div = document.createElement("div");
+        div.className = "msg " + role;
+        div.textContent = text;
+        chatBox.appendChild(div);
+        chatBox.scrollTop = chatBox.scrollHeight;
+        return div;
+      }
+
+      function setMeta(obj) {
+        chatMeta.textContent = Object.entries(obj).map(([k, v]) => `${k}: ${v}`).join(" | ");
+      }
+
+      async function checkHealth() {
+        try {
+          const res = await fetch("/health");
+          if (!res.ok) throw new Error("bad status");
+          healthBadge.textContent = "Healthy";
+          healthBadge.className = "status ok";
+        } catch (e) {
+          healthBadge.textContent = "Unhealthy";
+          healthBadge.className = "status bad";
+        }
+      }
+
+      async function sendNormalChat() {
+        const userId = document.getElementById("userId").value.trim() || "anonymous";
+        const sessionId = document.getElementById("sessionId").value.trim();
+        const message = document.getElementById("messageInput").value.trim();
+        if (!message) return;
+
+        addMsg("user", message);
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: userId, session_id: sessionId || null, message }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(JSON.stringify(data));
+
+        addMsg("assistant", data.response || "(empty)");
+        if (data.session_id && !sessionId) document.getElementById("sessionId").value = data.session_id;
+        setMeta({
+          session_id: data.session_id || "-",
+          intent: data.intent || "-",
+          compliance_passed: data.compliance_passed,
+          mode: "normal",
+        });
+      }
+
+      async function sendStreamChat() {
+        const userId = document.getElementById("userId").value.trim() || "anonymous";
+        const sessionId = document.getElementById("sessionId").value.trim();
+        const message = document.getElementById("messageInput").value.trim();
+        if (!message) return;
+
+        addMsg("user", message);
+        const assistantNode = addMsg("assistant", "");
+
+        const res = await fetch("/api/chat/stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: userId, session_id: sessionId || null, message }),
+        });
+        if (!res.ok || !res.body) {
+          const text = await res.text();
+          throw new Error(text || "stream failed");
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let buffer = "";
+        let finalMeta = {};
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          const events = buffer.split("\n\n");
+          buffer = events.pop() || "";
+          for (const eventRaw of events) {
+            if (!eventRaw.trim()) continue;
+            const lines = eventRaw.split("\n");
+            let event = "";
+            let dataLine = "";
+            for (const line of lines) {
+              if (line.startsWith("event:")) event = line.replace("event:", "").trim();
+              if (line.startsWith("data:")) dataLine = line.replace("data:", "").trim();
+            }
+            let payload = {};
+            try { payload = JSON.parse(dataLine || "{}"); } catch {}
+
+            if (event === "chunk") {
+              assistantNode.textContent += payload.content || "";
+            } else if (event === "meta" && payload.session_id && !sessionId) {
+              document.getElementById("sessionId").value = payload.session_id;
+            } else if (event === "done") {
+              finalMeta = payload;
+            }
+          }
+          chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        setMeta({
+          session_id: finalMeta.session_id || document.getElementById("sessionId").value || "-",
+          intent: finalMeta.intent || "-",
+          compliance_passed: finalMeta.compliance_passed,
+          latency_ms: finalMeta.latency_ms || "-",
+          mode: "stream",
+        });
+      }
+
+      async function loadHistory() {
+        const sessionId = document.getElementById("sessionId").value.trim();
+        if (!sessionId) {
+          alert("请先输入或生成 session_id");
+          return;
+        }
+        const res = await fetch(`/api/history/${encodeURIComponent(sessionId)}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(JSON.stringify(data));
+        addMsg("meta", `History(${sessionId}):\n` + JSON.stringify(data.messages || [], null, 2));
+      }
+
+      async function callTool() {
+        const name = document.getElementById("toolName").value;
+        const argsText = document.getElementById("toolArgs").value.trim() || "{}";
+        const userId = document.getElementById("toolUserId").value.trim() || "api-user";
+        const role = document.getElementById("toolRole").value;
+        let argumentsObj = {};
+        try { argumentsObj = JSON.parse(argsText); } catch (e) { alert("arguments JSON格式错误"); return; }
+
+        const res = await fetch("/api/tools/call", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-id": userId,
+            "x-user-role": role,
+          },
+          body: JSON.stringify({ name, arguments: argumentsObj }),
+        });
+        const data = await res.json();
+        toolOutput.textContent = JSON.stringify(data, null, 2);
+      }
+
+      async function listTools() {
+        const res = await fetch("/api/tools");
+        const data = await res.json();
+        toolOutput.textContent = JSON.stringify(data, null, 2);
+      }
+
+      async function getMetrics() {
+        const res = await fetch("/api/metrics");
+        const data = await res.json();
+        toolOutput.textContent = JSON.stringify(data, null, 2);
+      }
+
+      document.getElementById("sendBtn").addEventListener("click", async () => {
+        try {
+          const mode = document.getElementById("chatMode").value;
+          if (mode === "stream") await sendStreamChat();
+          else await sendNormalChat();
+        } catch (e) {
+          addMsg("meta", "请求失败: " + e.message);
+        }
+      });
+      document.getElementById("historyBtn").addEventListener("click", async () => {
+        try { await loadHistory(); } catch (e) { addMsg("meta", "查询历史失败: " + e.message); }
+      });
+      document.getElementById("clearBtn").addEventListener("click", () => {
+        chatBox.innerHTML = "";
+        chatMeta.textContent = "";
+      });
+      document.getElementById("toolCallBtn").addEventListener("click", callTool);
+      document.getElementById("toolListBtn").addEventListener("click", listTools);
+      document.getElementById("metricsBtn").addEventListener("click", getMetrics);
+
+      checkHealth();
+      setInterval(checkHealth, 15000);
+    </script>
+  </body>
+  </html>

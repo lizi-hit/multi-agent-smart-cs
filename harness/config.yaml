@@ -1,0 +1,9 @@
+# Minimal harness config
+datasets:
+  routing: harness/datasets/routing_v1.jsonl
+  rag: harness/datasets/rag_v1.jsonl
+
+thresholds:
+  routing_accuracy_min: 0.90
+  rag_keyword_hit_min: 0.75
+  avg_latency_ms_max: 3000

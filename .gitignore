@@ -1,0 +1,42 @@
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Secrets / local env
+.env
+.env.*
+!.env.example
+python-impl/.env
+
+# Runtime artifacts
+harness/results/latest.json
+harness/results/latest.md
+harness_service.log
+*.log
+
+# Local data / indexes
+vector_store/
+python-impl/vector_store/
+*.faiss
+*.meta.json
+
+# Node (future frontend extension)
+node_modules/
+dist/
+build/
