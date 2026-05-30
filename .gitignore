@@ -36,6 +36,10 @@ python-impl/vector_store/
 *.faiss
 *.meta.json
 
+# Local docs not for GitHub
+multi-agent-smart-cs-guide-zh.pdf
+python-impl-学习与需求对照.md
+
 # Node (future frontend extension)
 node_modules/
 dist/
